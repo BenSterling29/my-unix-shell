@@ -35,7 +35,11 @@ int main(void) {
             args[arg_count] = strtok(NULL," ");
         }
 
-        printf("You entered: %s\n", line);
+        arg_count = 0;
+        while (args[arg_count] != NULL) {
+            printf("You entered: %s\n", args[arg_count]);
+            arg_count++;
+        }
     }
     return 0;
 }
