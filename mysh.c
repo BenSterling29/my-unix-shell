@@ -53,13 +53,12 @@ int main(void) {
 
         if (strcmp(args[0],"exit") == 0) break;
 
-        char *fileName = NULL;
-        int direction = 0;
+        char *outFile = NULL;
+        char *inFile = NULL;
         for (int i = 0; i < arg_count; i++) {
             if (strcmp(args[i], ">") == 0) {
-                direction = 1;
                 if (i + 1 < arg_count) {
-                    fileName = args[i + 1];
+                    outFile = args[i + 1];
                     args[i] = NULL;
                 } else {
                     perror("no output file provided");
@@ -67,9 +66,8 @@ int main(void) {
                 break;
             }
             if (strcmp(args[i], "<") == 0) {
-                direction = 2;
                 if (i + 1 < arg_count) {
-                    fileName = args[i + 1];
+                    inFile = args[i + 1];
                     args[i] = NULL;
                 } else {
                     perror("no input file provided");
@@ -77,18 +75,66 @@ int main(void) {
             }
         }
 
+        int piping = -1;
+        for (int i = 0; i < arg_count; i++) {
+            if (strcmp(args[i], "|") == 0) {
+                piping = i;
+                args[i] = NULL;
+                break;
+            }
+        }
 
+        if (piping != -1) {
 
-        pid_t pid = fork();
+            char **left_args = args;
+            char **right_args = &args[piping + 1];
 
-        if (pid == -1) {
-            perror("fork failed");
-        } else if (pid == 0) {
-            // Child process
+            int pipefd[2];
+            if (pipe(pipefd) == -1) {
+                perror("pipe failed");
+                continue;
+            }
 
-            if (fileName != NULL) {
-                if (direction == 1) {
-                    int fd = open(fileName, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            // Left (Producer)
+            pid_t pid1 = fork();
+            if (pid1 == 0) {
+                close(pipefd[0]);
+                dup2(pipefd[1], STDOUT_FILENO);
+                close(pipefd[1]);
+
+                execvp(left_args[0], left_args);
+                perror("exec failed (left)");
+                exit(1);
+            }
+
+            // Right (Consumer)
+            pid_t pid2 = fork();
+            if (pid2 == 0) {
+                close(pipefd[1]);
+                dup2(pipefd[0], STDIN_FILENO);
+                close(pipefd[0]);
+
+                execvp(right_args[0], right_args);
+                perror("exec failed (right)");
+                exit(1);
+            }
+
+            close(pipefd[0]);
+            close(pipefd[1]);
+
+            waitpid(pid1, NULL, 0);
+            waitpid(pid2, NULL, 0);
+        } else {
+
+            // Standard Fork
+            pid_t pid = fork();
+
+            if (pid == -1) {
+                perror("fork failed");
+            } else if (pid == 0) {
+                // Child process
+                if (outFile != NULL) {
+                    int fd = open(outFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                     if (fd == -1) {
                         perror("open failed");
                         exit(1);
@@ -100,8 +146,8 @@ int main(void) {
                     }
                     close(fd);
                 }
-                if (direction == 2) {
-                    int fd = open(fileName, O_RDONLY);
+                if (inFile != NULL) {
+                    int fd = open(inFile, O_RDONLY);
                     if (fd == -1) {
                         perror("open failed");
                         exit(1);
@@ -111,19 +157,15 @@ int main(void) {
                     }
                     close(fd);
                 }
+
+                execvp(args[0], args);
+                perror("exec failed");
+                exit(1);
+            } else {
+                // Parent process
+                waitpid(pid, NULL, 0);
             }
-
-
-            execvp(args[0], args);
-            perror("exec failed");
-            exit(1);
-        } else {
-            // Parent process
-            waitpid(pid, NULL, 0);
         }
-
-
-
     }
     return 0;
 }
