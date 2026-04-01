@@ -55,28 +55,35 @@ int main(void) {
 
         char *outFile = NULL;
         char *inFile = NULL;
+        int bad_redirect = 0;
         for (int i = 0; i < arg_count; i++) {
+            if (args[i] == NULL) continue;
+
             if (strcmp(args[i], ">") == 0) {
-                if (i + 1 < arg_count) {
+                if (i + 1 < arg_count && args[i + 1] != NULL) {
                     outFile = args[i + 1];
                     args[i] = NULL;
                 } else {
-                    perror("no output file provided");
+                    fprintf(stderr, "no output file provided");
+                    bad_redirect = 1;
                 }
-                break;
             }
-            if (strcmp(args[i], "<") == 0) {
-                if (i + 1 < arg_count) {
+            else if (strcmp(args[i], "<") == 0) {
+                if (i + 1 < arg_count && args[i + 1] != NULL) {
                     inFile = args[i + 1];
                     args[i] = NULL;
                 } else {
-                    perror("no input file provided");
+                    fprintf(stderr, "no input file provided");
+                    bad_redirect = 1;
                 }
             }
         }
+        if (bad_redirect) continue;
 
         int piping = -1;
         for (int i = 0; i < arg_count; i++) {
+            if (args[i] == NULL) continue;
+            
             if (strcmp(args[i], "|") == 0) {
                 piping = i;
                 args[i] = NULL;
@@ -154,6 +161,8 @@ int main(void) {
                     }
                     if (dup2(fd, STDIN_FILENO) == -1) {
                         perror("dup2 failed");
+                        close(fd);
+                        exit(1);
                     }
                     close(fd);
                 }
